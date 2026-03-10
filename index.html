@@ -21,14 +21,14 @@
     <!-- SheetJS (for parsing Excel/CSV) -->
     <script src="https://cdn.sheetjs.com/xlsx-latest/package/dist/xlsx.full.min.js"></script>
     
-    <!-- html2canvas (for exporting Dashboard as Image) -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+    <!-- เปลี่ยนจาก html2canvas เป็น html-to-image เพื่อแก้ปัญหาตัวหนังสือภาษาไทยตกขอบแบบ 100% -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html-to-image/1.11.11/html-to-image.min.js"></script>
 
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Sarabun:wght@300;400;500;600;700&display=swap');
         body { font-family: 'Sarabun', sans-serif; background-color: #f3f4f6; }
         
-        /* สไตล์ตารางแบบดั้งเดิม ลดการใช้ Flexbox เพื่อให้ html2canvas ทำงานได้แม่นยำ 100% */
+        /* สไตล์ตารางแบบดั้งเดิม ให้เบราว์เซอร์จัดกึ่งกลางเองตามธรรมชาติ */
         table { border-collapse: collapse; width: 100%; }
         td, th { vertical-align: middle; }
         
@@ -187,19 +187,14 @@
                     if (!dashboardRef.current) return;
                     setIsLoading(true);
                     try {
-                        const canvas = await html2canvas(dashboardRef.current, { scale: 2, backgroundColor: '#ffffff', logging: false });
-                        canvas.toBlob(async (blob) => {
-                            try {
-                                const item = new ClipboardItem({ 'image/png': blob });
-                                await navigator.clipboard.write([item]);
-                                alert('คัดลอกรูปภาพลงคลิปบอร์ดแล้ว สามารถนำไปวางใน LINE ได้เลย');
-                            } catch (err) {
-                                alert('เบราว์เซอร์ของคุณไม่รองรับการคัดลอกรูปภาพอัตโนมัติ กรุณาใช้ปุ่ม Download แทน');
-                            }
-                        });
+                        // ใช้ html-to-image (แม่นยำกว่า 100%)
+                        const blob = await window.htmlToImage.toBlob(dashboardRef.current, { backgroundColor: '#ffffff', pixelRatio: 2 });
+                        const item = new ClipboardItem({ 'image/png': blob });
+                        await navigator.clipboard.write([item]);
+                        alert('คัดลอกรูปภาพลงคลิปบอร์ดแล้ว สามารถนำไปวางใน LINE ได้เลย');
                     } catch (error) {
                         console.error(error);
-                        alert('เกิดข้อผิดพลาดในการสร้างรูปภาพ');
+                        alert('เบราว์เซอร์ของคุณไม่รองรับการคัดลอกรูปภาพอัตโนมัติ (หรือเกิดข้อผิดพลาด) กรุณาใช้ปุ่ม Download แทน');
                     } finally {
                         setIsLoading(false);
                     }
@@ -209,10 +204,11 @@
                     if (!dashboardRef.current) return;
                     setIsLoading(true);
                     try {
-                        const canvas = await html2canvas(dashboardRef.current, { scale: 2, backgroundColor: '#ffffff', logging: false });
+                        // ใช้ html-to-image (แม่นยำกว่า 100%)
+                        const dataUrl = await window.htmlToImage.toPng(dashboardRef.current, { backgroundColor: '#ffffff', pixelRatio: 2 });
                         const link = document.createElement('a');
                         link.download = `Dashboard_${getMonthYearString(selectedDate)}.png`;
-                        link.href = canvas.toDataURL('image/png');
+                        link.href = dataUrl;
                         link.click();
                     } catch (error) {
                         console.error(error);
@@ -238,15 +234,12 @@
 
                     const total = calcTotal(filteredData);
 
-                    // ใช้เทคนิคการกำหนด height และ line-height ให้เท่ากัน เพื่อบังคับให้ตัวหนังสืออยู่กึ่งกลางเป๊ะเสมอสำหรับ html2canvas
-                    const cellHeight = "30px";
-                    
+                    // ใช้ Padding จัดกึ่งกลางแบบธรรมชาติที่เบราว์เซอร์เข้าใจ 100%
                     const baseTdStyle = {
-                        height: cellHeight,
-                        lineHeight: cellHeight,
-                        padding: '0 8px', // ลบ padding แนวตั้งออกเพื่อไม่ให้กวนการคำนวณของ canvas
+                        padding: '6px 8px', 
                         borderBottom: '1px solid black',
                         fontWeight: 'bold',
+                        verticalAlign: 'middle', // จัดกึ่งกลางแนวตั้งเสมอ
                         margin: 0
                     };
 
@@ -257,8 +250,7 @@
                                 color: 'white', 
                                 textShadow: '1px 1px 2px rgba(0,0,0,0.2)', 
                                 borderBottom: '1px solid black',
-                                height: '34px',
-                                lineHeight: '34px',
+                                padding: '8px 0',
                                 textAlign: 'center',
                                 fontWeight: 'bold',
                                 fontSize: '1.125rem'
@@ -314,27 +306,23 @@
                             />
                         </div>
 
-                        {/* Capture Area */}
-                        <div id="dashboard-tables" ref={dashboardRef} className="bg-white shadow-sm" style={{ width: '400px', margin: '0 auto', padding: '2px' }}>
-                            <div className="bg-white" style={{ borderLeft: '1px solid black', borderRight: '1px solid black', borderTop: '1px solid black' }}>
-                                
-                                <div style={{ 
-                                    borderBottom: '1px solid black',
-                                    height: '40px',
-                                    lineHeight: '40px',
-                                    textAlign: 'center',
-                                    fontWeight: 'bold',
-                                    fontSize: '1.25rem'
-                                }}>
-                                    {getDisplayDateRange(selectedDate)}
-                                </div>
-                                
-                                {renderTable("Curtain", filterKnownEmployees(dashboardData.curtain))}
-                                {renderTable("Curtain - Fabric / Bedding", filterKnownEmployees(dashboardData.curtainFabric))}
-                                {renderTable("Material", dashboardData.material)}
-                                {renderTable("Project", dashboardData.project)}
-                                
+                        {/* Capture Area: นำ border เข้ามาใส่ที่ตัวนี้โดยตรง เพื่อลดขอบขาวรอบนอกให้เหลือ 0 */}
+                        <div id="dashboard-tables" ref={dashboardRef} className="bg-white" style={{ width: '400px', margin: '0 auto', borderTop: '1px solid black', borderLeft: '1px solid black', borderRight: '1px solid black' }}>
+                            <div style={{ 
+                                borderBottom: '1px solid black',
+                                padding: '8px 0',
+                                textAlign: 'center',
+                                fontWeight: 'bold',
+                                fontSize: '1.25rem'
+                            }}>
+                                {getDisplayDateRange(selectedDate)}
                             </div>
+                            
+                            {renderTable("Curtain", filterKnownEmployees(dashboardData.curtain))}
+                            {renderTable("Curtain - Fabric / Bedding", filterKnownEmployees(dashboardData.curtainFabric))}
+                            {renderTable("Material", dashboardData.material)}
+                            {renderTable("Project", dashboardData.project)}
+                            
                         </div>
 
                         <div className="flex justify-center gap-4 mt-6">
