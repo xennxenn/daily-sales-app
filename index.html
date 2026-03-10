@@ -58,7 +58,10 @@
                 { name: "สุเทพ (เทพ)", amount: 192682.00 },
                 { name: "ณาตฏิกา (ณาต)", amount: 139795.00 },
                 { name: "ธัญญ์ชยา (ตูน)", amount: 28642.00 },
-                { name: "ณัฐกฤตา (พู่กัน)", amount: 19747.00 }
+                { name: "ณัฐกฤตา (พู่กัน)", amount: 19747.00 },
+                { name: "ภัทยา (ปอนด์)", amount: 15500.00 },
+                { name: "ธนัท (ตี้)", amount: 10200.00 },
+                { name: "ภัทรธิดา (หมวย)", amount: 8000.00 }
             ],
             curtainFabric: [
                 { name: "ฐิติญา (ออย)", amount: 7656.00 }
@@ -149,7 +152,11 @@
                 setIsLoading(true);
                 try {
                     const monthStr = getMonthYearString(selectedDate);
-                    const response = await fetch(`${gasUrl}?action=getDashboard&month=${monthStr}`);
+                    // ป้องกัน Browser จำค่าเดิม (Cache) โดยการต่อท้ายด้วยเวลาปัจจุบัน (timestamp)
+                    const timestamp = new Date().getTime();
+                    const response = await fetch(`${gasUrl}?action=getDashboard&month=${monthStr}&t=${timestamp}`, {
+                        cache: 'no-store'
+                    });
                     const result = await response.json();
                     if(result.status === 'success') {
                         setDashboardData(result.data);
@@ -166,10 +173,14 @@
 
             useEffect(() => {
                 if(activeTab === 'dashboard') {
-                    // In a real app, you would fetch here. 
-                    // fetchDashboardData();
+                    // สั่งให้ดึงข้อมูลอัตโนมัติเมื่อเปลี่ยนเดือนหรือเปิดหน้า Dashboard
+                    if (gasUrl) {
+                        fetchDashboardData();
+                    } else {
+                        setDashboardData(mockDashboardData);
+                    }
                 }
-            }, [activeTab, selectedDate]);
+            }, [activeTab, selectedDate]); // ทำงานทุกครั้งที่เปลี่ยนเดือน (selectedDate)
 
             // --- Components ---
 
@@ -224,22 +235,22 @@
                     const total = calcTotal(filteredData);
 
                     return (
-                        <div className="mb-0 border border-black border-b-0 last:border-b">
-                            <div className="table-header py-1 text-lg" style={{backgroundColor: '#a4c2f4', color: 'white', textShadow: '1px 1px 2px rgba(0,0,0,0.2)'}}>
+                        <div className="mb-0">
+                            <div className="table-header py-1 text-lg" style={{backgroundColor: '#a4c2f4', color: 'white', textShadow: '1px 1px 2px rgba(0,0,0,0.2)', borderBottom: '1px solid black'}}>
                                 {title}
                             </div>
-                            <table className="w-full text-black bg-white border-collapse">
+                            <table className="w-full text-black bg-white" style={{ borderCollapse: 'collapse' }}>
                                 <tbody>
                                     {filteredData.map((item, index) => (
-                                        <tr key={index} className="border-b border-black">
-                                            <td className="w-12 text-center py-1 font-bold border-r border-black">{index + 1}</td>
-                                            <td className="px-3 py-1 font-bold border-r border-black">{item.name}</td>
-                                            <td className="px-3 py-1 text-right font-bold w-40">{formatCurrency(item.amount)}</td>
+                                        <tr key={index}>
+                                            <td className="w-12 text-center py-1 font-bold" style={{ borderBottom: '1px solid black', borderRight: '1px solid black' }}>{index + 1}</td>
+                                            <td className="px-3 py-1 font-bold" style={{ borderBottom: '1px solid black', borderRight: '1px solid black' }}>{item.name}</td>
+                                            <td className="px-3 py-1 text-right font-bold w-40" style={{ borderBottom: '1px solid black' }}>{formatCurrency(item.amount)}</td>
                                         </tr>
                                     ))}
-                                    <tr className="table-total border-b border-black">
-                                        <td colSpan="2" className="px-3 py-1 text-center border-r border-black">Grand Total</td>
-                                        <td className="px-3 py-1 text-right">{formatCurrency(total)}</td>
+                                    <tr className="table-total" style={{ backgroundColor: '#ffff00' }}>
+                                        <td colSpan="2" className="px-3 py-1 text-center font-bold" style={{ borderBottom: '1px solid black', borderRight: '1px solid black' }}>Grand Total</td>
+                                        <td className="px-3 py-1 text-right font-bold" style={{ borderBottom: '1px solid black' }}>{formatCurrency(total)}</td>
                                     </tr>
                                 </tbody>
                             </table>
@@ -269,14 +280,16 @@
 
                         {/* Capture Area */}
                         <div id="dashboard-tables" ref={dashboardRef} className="bg-white p-4 shadow-sm border" style={{ width: '400px', margin: '0 auto' }}>
-                            <div className="text-center font-bold text-xl mb-0 py-1 border border-black border-b-0 bg-white">
-                                {getDisplayDateRange(selectedDate)}
+                            <div className="bg-white" style={{ borderLeft: '1px solid black', borderRight: '1px solid black', borderTop: '1px solid black' }}>
+                                <div className="text-center font-bold text-xl mb-0 py-1" style={{ borderBottom: '1px solid black' }}>
+                                    {getDisplayDateRange(selectedDate)}
+                                </div>
+                                
+                                {renderTable("Curtain", dashboardData.curtain)}
+                                {renderTable("Curtain - Fabric / Bedding", dashboardData.curtainFabric)}
+                                {renderTable("Material", dashboardData.material)}
+                                {renderTable("Project", dashboardData.project)}
                             </div>
-                            
-                            {renderTable("Curtain", dashboardData.curtain)}
-                            {renderTable("Curtain - Fabric / Bedding", dashboardData.curtainFabric)}
-                            {renderTable("Material", dashboardData.material)}
-                            {renderTable("Project", dashboardData.project)}
                         </div>
 
                         <div className="flex justify-center gap-4 mt-6">
@@ -308,7 +321,7 @@
                             const wsname = wb.SheetNames[0];
                             const ws = wb.Sheets[wsname];
                             const data = XLSX.utils.sheet_to_json(ws, {header:1});
-                            setPreviewData(data.slice(0, 5)); // Preview top 5 rows
+                            setPreviewData(data.slice(0, 50)); // Preview up to 50 rows
                         };
                         reader.readAsBinaryString(selectedFile);
                     }
@@ -389,9 +402,9 @@
 
                         {previewData.length > 0 && (
                             <div className="mb-4">
-                                <h3 className="font-medium text-sm mb-2 text-gray-600">ตัวอย่างข้อมูล (5 แถวแรก)</h3>
-                                <div className="overflow-x-auto">
-                                    <table className="min-w-full text-xs border">
+                                <h3 className="font-medium text-sm mb-2 text-gray-600">ตัวอย่างข้อมูล (แสดงสูงสุด 50 แถวแรก)</h3>
+                                <div className="overflow-x-auto max-h-64 border rounded">
+                                    <table className="min-w-full text-xs bg-white">
                                         <tbody>
                                             {previewData.map((row, i) => (
                                                 <tr key={i} className="border-b">
