@@ -5,6 +5,11 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Daily Sales Report Application</title>
     
+    <!-- นำเข้าฟอนต์แบบ Link เพื่อแก้ปัญหาตัวแปลงรูปภาพหาฟอนต์ไม่เจอ -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    
     <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
     
@@ -21,11 +26,10 @@
     <!-- SheetJS (for parsing Excel/CSV) -->
     <script src="https://cdn.sheetjs.com/xlsx-latest/package/dist/xlsx.full.min.js"></script>
     
-    <!-- เปลี่ยนจาก html2canvas เป็น html-to-image เพื่อแก้ปัญหาตัวหนังสือภาษาไทยตกขอบแบบ 100% -->
+    <!-- html-to-image -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html-to-image/1.11.11/html-to-image.min.js"></script>
 
     <style>
-        @import url('https://fonts.googleapis.com/css2?family=Sarabun:wght@300;400;500;600;700&display=swap');
         body { font-family: 'Sarabun', sans-serif; background-color: #f3f4f6; }
         
         /* สไตล์ตารางแบบดั้งเดิม ให้เบราว์เซอร์จัดกึ่งกลางเองตามธรรมชาติ */
@@ -63,8 +67,7 @@
                 { name: "ณัฐกฤตา (พู่กัน)", amount: 19747.00 },
                 { name: "ภัทยา (ปอนด์)", amount: 15500.00 },
                 { name: "ธนัท (ตี้)", amount: 10200.00 },
-                { name: "ภัทรธิดา (หมวย)", amount: 8000.00 },
-                { name: "พนักงานทดสอบ (ไม่มีในระบบ)", amount: 99999.00 }
+                { name: "ภัทรธิดา (หมวย)", amount: 8000.00 }
             ],
             curtainFabric: [
                 { name: "ฐิติญา (ออย)", amount: 7656.00 }
@@ -143,7 +146,7 @@
 
             const fetchDashboardData = async () => {
                 if (!gasUrl) {
-                    alert('กำลังแสดงข้อมูลตัวอย่าง กรุณาตั้งค่า Google Apps Script URL ในเมนูตั้งค่าเพื่อดึงข้อมูลจริง');
+                    alert('กำลังแสดงข้อมูลตัวอย่าง กรุณาตั้งค่า Google Apps Script URL ในหน้าตั้งค่าเพื่อดึงข้อมูลจริง');
                     return;
                 }
                 setIsLoading(true);
@@ -183,12 +186,26 @@
             const DashboardView = () => {
                 const dashboardRef = useRef(null);
 
+                // ฟังก์ชันสำหรับประมวลผลรูปภาพ (เรียก 2 รอบ เพื่อบังคับให้โหลดฟอนต์ 100%)
+                const captureImage = async () => {
+                    const node = dashboardRef.current;
+                    const options = { 
+                        backgroundColor: '#ffffff', 
+                        pixelRatio: 2, 
+                        style: { fontFamily: "'Sarabun', sans-serif" } 
+                    };
+                    
+                    // รอบแรก: Waking up renderer / fonts
+                    await window.htmlToImage.toPng(node, options);
+                    // รอบสอง: ภาพจริง
+                    return await window.htmlToImage.toBlob(node, options);
+                };
+
                 const handleCopy = async () => {
                     if (!dashboardRef.current) return;
                     setIsLoading(true);
                     try {
-                        // ใช้ html-to-image (แม่นยำกว่า 100%)
-                        const blob = await window.htmlToImage.toBlob(dashboardRef.current, { backgroundColor: '#ffffff', pixelRatio: 2 });
+                        const blob = await captureImage();
                         const item = new ClipboardItem({ 'image/png': blob });
                         await navigator.clipboard.write([item]);
                         alert('คัดลอกรูปภาพลงคลิปบอร์ดแล้ว สามารถนำไปวางใน LINE ได้เลย');
@@ -204,12 +221,13 @@
                     if (!dashboardRef.current) return;
                     setIsLoading(true);
                     try {
-                        // ใช้ html-to-image (แม่นยำกว่า 100%)
-                        const dataUrl = await window.htmlToImage.toPng(dashboardRef.current, { backgroundColor: '#ffffff', pixelRatio: 2 });
+                        const blob = await captureImage();
+                        const dataUrl = URL.createObjectURL(blob);
                         const link = document.createElement('a');
                         link.download = `Dashboard_${getMonthYearString(selectedDate)}.png`;
                         link.href = dataUrl;
                         link.click();
+                        URL.revokeObjectURL(dataUrl);
                     } catch (error) {
                         console.error(error);
                         alert('เกิดข้อผิดพลาดในการดาวน์โหลด');
@@ -234,22 +252,23 @@
 
                     const total = calcTotal(filteredData);
 
-                    // ใช้ Padding จัดกึ่งกลางแบบธรรมชาติที่เบราว์เซอร์เข้าใจ 100%
+                    // ใช้รหัสสี Hex ป้องกันเพี้ยนตอนแปลงรูป
                     const baseTdStyle = {
                         padding: '6px 8px', 
-                        borderBottom: '1px solid black',
+                        borderBottom: '1px solid #000000',
                         fontWeight: 'bold',
-                        verticalAlign: 'middle', // จัดกึ่งกลางแนวตั้งเสมอ
-                        margin: 0
+                        verticalAlign: 'middle', 
+                        margin: 0,
+                        color: '#000000'
                     };
 
                     return (
-                        <div className="mb-0 w-full">
+                        <div className="mb-0 w-full" style={{ fontFamily: "'Sarabun', sans-serif" }}>
                             <div style={{
                                 backgroundColor: '#a4c2f4', 
-                                color: 'white', 
+                                color: '#ffffff', 
                                 textShadow: '1px 1px 2px rgba(0,0,0,0.2)', 
-                                borderBottom: '1px solid black',
+                                borderBottom: '1px solid #000000',
                                 padding: '8px 0',
                                 textAlign: 'center',
                                 fontWeight: 'bold',
@@ -257,14 +276,14 @@
                             }}>
                                 {title}
                             </div>
-                            <table style={{ width: '100%', backgroundColor: 'white' }}>
+                            <table style={{ width: '100%', backgroundColor: '#ffffff' }}>
                                 <tbody>
                                     {filteredData.map((item, index) => (
                                         <tr key={index}>
-                                            <td style={{ ...baseTdStyle, width: '40px', textAlign: 'center', borderRight: '1px solid black' }}>
+                                            <td style={{ ...baseTdStyle, width: '40px', textAlign: 'center', borderRight: '1px solid #000000' }}>
                                                 {index + 1}
                                             </td>
-                                            <td style={{ ...baseTdStyle, textAlign: 'left', borderRight: '1px solid black' }}>
+                                            <td style={{ ...baseTdStyle, textAlign: 'left', borderRight: '1px solid #000000' }}>
                                                 {item.name}
                                             </td>
                                             <td style={{ ...baseTdStyle, width: '150px', textAlign: 'right' }}>
@@ -273,7 +292,7 @@
                                         </tr>
                                     ))}
                                     <tr style={{ backgroundColor: '#ffff00' }}>
-                                        <td colSpan="2" style={{ ...baseTdStyle, textAlign: 'center', borderRight: '1px solid black' }}>
+                                        <td colSpan="2" style={{ ...baseTdStyle, textAlign: 'center', borderRight: '1px solid #000000' }}>
                                             Grand Total
                                         </td>
                                         <td style={{ ...baseTdStyle, textAlign: 'right' }}>
@@ -306,14 +325,15 @@
                             />
                         </div>
 
-                        {/* Capture Area: นำ border เข้ามาใส่ที่ตัวนี้โดยตรง เพื่อลดขอบขาวรอบนอกให้เหลือ 0 */}
-                        <div id="dashboard-tables" ref={dashboardRef} className="bg-white" style={{ width: '400px', margin: '0 auto', borderTop: '1px solid black', borderLeft: '1px solid black', borderRight: '1px solid black' }}>
+                        {/* Capture Area */}
+                        <div id="dashboard-tables" ref={dashboardRef} className="bg-white" style={{ width: '400px', margin: '0 auto', border: '1px solid #000000', padding: 0, fontFamily: "'Sarabun', sans-serif" }}>
                             <div style={{ 
-                                borderBottom: '1px solid black',
+                                borderBottom: '1px solid #000000',
                                 padding: '8px 0',
                                 textAlign: 'center',
                                 fontWeight: 'bold',
-                                fontSize: '1.25rem'
+                                fontSize: '1.25rem',
+                                color: '#000000'
                             }}>
                                 {getDisplayDateRange(selectedDate)}
                             </div>
@@ -362,7 +382,7 @@
 
                 const handleUpload = async () => {
                     if (!file) return alert("กรุณาเลือกไฟล์ก่อน");
-                    if (!gasUrl) return alert("กรุณาตั้งค่า Google Apps Script URL ในเมนูตั้งค่าก่อนอัพโหลด");
+                    if (!gasUrl) return alert("กรุณาตั้งค่า Google Apps Script URL ในหน้าตั้งค่าก่อนใช้งาน");
 
                     setIsLoading(true);
                     
@@ -459,14 +479,26 @@
                 );
             };
 
-            // 3. Settings View
+            // 3. Settings View (with Authentication)
             const SettingsView = () => {
+                const [isAuthenticated, setIsAuthenticated] = useState(false);
+                const [username, setUsername] = useState('');
+                const [password, setPassword] = useState('');
                 const [newEmp, setNewEmp] = useState('');
 
                 const saveGasUrl = (e) => {
                     const val = e.target.value;
                     setGasUrl(val);
                     localStorage.setItem('gasUrl', val);
+                };
+
+                const handleLogin = (e) => {
+                    e.preventDefault();
+                    if (username === 'Admin' && password === '0830614345') {
+                        setIsAuthenticated(true);
+                    } else {
+                        alert('Username หรือ Password ไม่ถูกต้อง!');
+                    }
                 };
 
                 const addEmployee = () => {
@@ -481,14 +513,51 @@
                     }
                 };
 
+                if (!isAuthenticated) {
+                    return (
+                        <div className="max-w-md mx-auto bg-white p-8 rounded shadow mt-10">
+                            <div className="text-center mb-6">
+                                <i data-lucide="lock" className="w-12 h-12 text-blue-500 mx-auto mb-2"></i>
+                                <h2 className="text-2xl font-bold">เข้าสู่ระบบจัดการ</h2>
+                                <p className="text-gray-500 text-sm">เฉพาะผู้ดูแลระบบ (Admin) เท่านั้น</p>
+                            </div>
+                            <form onSubmit={handleLogin} className="space-y-4">
+                                <div>
+                                    <label className="block text-sm font-medium mb-1">Username</label>
+                                    <input 
+                                        type="text" 
+                                        value={username} 
+                                        onChange={(e) => setUsername(e.target.value)} 
+                                        className="w-full border p-2 rounded focus:ring-2 focus:ring-blue-300 outline-none" 
+                                        required 
+                                    />
+                                </div>
+                                <div>
+                                    <label className="block text-sm font-medium mb-1">Password</label>
+                                    <input 
+                                        type="password" 
+                                        value={password} 
+                                        onChange={(e) => setPassword(e.target.value)} 
+                                        className="w-full border p-2 rounded focus:ring-2 focus:ring-blue-300 outline-none" 
+                                        required 
+                                    />
+                                </div>
+                                <button type="submit" className="w-full bg-blue-600 text-white py-3 rounded font-bold hover:bg-blue-700 transition">
+                                    เข้าสู่ระบบ
+                                </button>
+                            </form>
+                        </div>
+                    );
+                }
+
                 return (
                     <div className="max-w-2xl mx-auto space-y-6">
-                        <div className="bg-white p-6 rounded shadow">
+                        <div className="bg-white p-6 rounded shadow border-t-4 border-blue-500">
                             <h2 className="text-xl font-bold mb-4 border-b pb-2 flex items-center gap-2">
                                 <i data-lucide="link" className="w-5 h-5 text-blue-500"></i> การเชื่อมต่อ Google Sheets
                             </h2>
                             <p className="text-sm text-gray-600 mb-2">
-                                วาง Web App URL ที่ได้จาก Google Apps Script ที่นี่ เพื่อให้ระบบสามารถดึงและบันทึกข้อมูลได้
+                                วาง Web App URL ที่นี่ (ระบบจะจำไว้ในเครื่องอัตโนมัติ)
                             </p>
                             <input 
                                 type="text" 
@@ -499,10 +568,15 @@
                             />
                         </div>
 
-                        <div className="bg-white p-6 rounded shadow">
-                            <h2 className="text-xl font-bold mb-4 border-b pb-2 flex items-center gap-2">
-                                <i data-lucide="users" className="w-5 h-5 text-green-500"></i> จัดการรายชื่อพนักงาน (ส่วนที่ 1-2)
-                            </h2>
+                        <div className="bg-white p-6 rounded shadow border-t-4 border-green-500">
+                            <div className="flex justify-between items-center mb-4 border-b pb-2">
+                                <h2 className="text-xl font-bold flex items-center gap-2">
+                                    <i data-lucide="users" className="w-5 h-5 text-green-500"></i> จัดการรายชื่อพนักงาน (ส่วนที่ 1-2)
+                                </h2>
+                                <button onClick={() => setIsAuthenticated(false)} className="text-sm text-red-500 hover:underline">
+                                    ออกจากระบบ (Logout)
+                                </button>
+                            </div>
                             <div className="flex gap-2 mb-4">
                                 <input 
                                     type="text" 
