@@ -1,0 +1,544 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Daily Sales Report Application</title>
+    
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- React & ReactDOM -->
+    <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    
+    <!-- Babel for JSX -->
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    
+    <!-- Lucide Icons -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+    
+    <!-- SheetJS (for parsing Excel/CSV) -->
+    <script src="https://cdn.sheetjs.com/xlsx-latest/package/dist/xlsx.full.min.js"></script>
+    
+    <!-- html2canvas (for exporting Dashboard as Image) -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Sarabun:wght@300;400;500;600;700&display=swap');
+        body { font-family: 'Sarabun', sans-serif; background-color: #f3f4f6; }
+        .table-header { background-color: #a4c2f4; font-weight: bold; text-align: center; color: white;}
+        .table-total { background-color: #ffff00; font-weight: bold; }
+        
+        /* Hide scrollbar for clean dashboard */
+        ::-webkit-scrollbar { width: 6px; height: 6px; }
+        ::-webkit-scrollbar-track { background: #f1f1f1; }
+        ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 10px; }
+        ::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+    </style>
+</head>
+<body>
+    <div id="root"></div>
+
+    <script type="text/babel">
+        const { useState, useEffect, useRef } = React;
+
+        // --- Mock Data (ข้อมูลตัวอย่างอ้างอิงจากรูปภาพของคุณ) ---
+        const initialEmployees = [
+            { id: 1, name: "ภัทยา (ปอนด์)" }, { id: 2, name: "สุเทพ (เทพ)" },
+            { id: 3, name: "ณาตฏิกา (ณาต)" }, { id: 4, name: "ฐิติญา (ออย)" },
+            { id: 5, name: "ธนัท (ตี้)" }, { id: 6, name: "ธัญญ์ชยา (ตูน)" },
+            { id: 7, name: "ณัฐกฤตา (พู่กัน)" }, { id: 8, name: "ภัทรธิดา (หมวย)" },
+            { id: 9, name: "อำนาจ (เค)" }
+        ];
+
+        const mockDashboardData = {
+            curtain: [
+                { name: "ฐิติญา (ออย)", amount: 281920.00 },
+                { name: "สุเทพ (เทพ)", amount: 192682.00 },
+                { name: "ณาตฏิกา (ณาต)", amount: 139795.00 },
+                { name: "ธัญญ์ชยา (ตูน)", amount: 28642.00 },
+                { name: "ณัฐกฤตา (พู่กัน)", amount: 19747.00 }
+            ],
+            curtainFabric: [
+                { name: "ฐิติญา (ออย)", amount: 7656.00 }
+            ],
+            material: [
+                { name: "Jaruporn (อาย)", amount: 805135.50 },
+                { name: "Nalinee (จ้อ)", amount: 795610.55 },
+                { name: "Vipada (วี)", amount: 610514.73 },
+                { name: "Panya (เก้า)", amount: 261468.83 },
+                { name: "Chidthep (ใหม่)", amount: 212498.75 }
+            ],
+            project: [
+                { name: "Panya (เก้า)", amount: 594454.90 },
+                { name: "Nattawut (นัท)", amount: 398953.00 },
+                { name: "Kanyanut (โบตั๋น)", amount: 18175.00 },
+                { name: "Vipada (วี)", amount: 4210.00 },
+                { name: "Nalinee (จ้อ)", amount: 980.00 }
+            ]
+        };
+
+        // --- Main App Component ---
+        function App() {
+            const [activeTab, setActiveTab] = useState('dashboard');
+            const [selectedDate, setSelectedDate] = useState(new Date());
+            const [employees, setEmployees] = useState(initialEmployees);
+            const [gasUrl, setGasUrl] = useState(localStorage.getItem('gasUrl') || '');
+            const [isLoading, setIsLoading] = useState(false);
+            const [dashboardData, setDashboardData] = useState(mockDashboardData);
+            
+            // Format functions
+            const formatCurrency = (num) => {
+                return num.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+            };
+
+            const getMonthYearString = (date) => {
+                const months = ['JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN', 'JUL', 'AUG', 'SEP', 'OCT', 'NOV', 'DEC'];
+                const yy = date.getFullYear().toString().slice(-2);
+                return `${months[date.getMonth()]}${yy}`;
+            };
+
+            const getDisplayDateRange = (selectedDate) => {
+                const now = new Date();
+                const selYear = selectedDate.getFullYear();
+                const selMonth = selectedDate.getMonth();
+                
+                const curYear = now.getFullYear();
+                const curMonth = now.getMonth();
+                const curDate = now.getDate();
+
+                let endDayStr = "01";
+
+                if (selYear < curYear || (selYear === curYear && selMonth < curMonth)) {
+                    // เดือนที่ผ่านมาแล้ว: วันที่ 1 ถึง สิ้นเดือน
+                    const lastDay = new Date(selYear, selMonth + 1, 0).getDate();
+                    endDayStr = String(lastDay).padStart(2, '0');
+                } else if (selYear === curYear && selMonth === curMonth) {
+                    // เดือนปัจจุบัน: วันที่ 1 ถึง วันปัจจุบัน
+                    endDayStr = String(curDate).padStart(2, '0');
+                } else {
+                    // เดือนอนาคต: วันที่ 1 ถึง 1
+                    endDayStr = "01";
+                }
+
+                const startStr = "01";
+                const monthStr = String(selMonth + 1).padStart(2, '0');
+                const yearStr = selYear.toString().slice(-2);
+
+                return `${startStr}-${endDayStr}/${monthStr}/${yearStr}`;
+            };
+
+            // Calculate totals
+            const calcTotal = (arr) => arr.reduce((sum, item) => sum + item.amount, 0);
+
+            // --- Handlers ---
+            const handleMonthChange = (e) => {
+                const [year, month] = e.target.value.split('-');
+                setSelectedDate(new Date(year, month - 1, 1));
+                
+                // เคลียร์ข้อมูลตารางทันทีที่เปลี่ยนเดือน (ถ้าไม่มีข้อมูลจาก Google Sheet จะซ่อนตาราง)
+                setDashboardData({ curtain: [], curtainFabric: [], material: [], project: [] });
+            };
+
+            const fetchDashboardData = async () => {
+                if (!gasUrl) {
+                    alert('กำลังแสดงข้อมูลตัวอย่าง กรุณาตั้งค่า Google Apps Script URL ในเมนูตั้งค่าเพื่อดึงข้อมูลจริง');
+                    return;
+                }
+                setIsLoading(true);
+                try {
+                    const monthStr = getMonthYearString(selectedDate);
+                    const response = await fetch(`${gasUrl}?action=getDashboard&month=${monthStr}`);
+                    const result = await response.json();
+                    if(result.status === 'success') {
+                        setDashboardData(result.data);
+                    } else {
+                        alert('เกิดข้อผิดพลาดในการดึงข้อมูล: ' + result.message);
+                    }
+                } catch (error) {
+                    console.error(error);
+                    alert('ไม่สามารถเชื่อมต่อกับ Google Apps Script ได้');
+                } finally {
+                    setIsLoading(false);
+                }
+            };
+
+            useEffect(() => {
+                if(activeTab === 'dashboard') {
+                    // In a real app, you would fetch here. 
+                    // fetchDashboardData();
+                }
+            }, [activeTab, selectedDate]);
+
+            // --- Components ---
+
+            // 1. Dashboard View
+            const DashboardView = () => {
+                const dashboardRef = useRef(null);
+
+                const handleCopy = async () => {
+                    if (!dashboardRef.current) return;
+                    setIsLoading(true);
+                    try {
+                        const canvas = await html2canvas(dashboardRef.current, { scale: 2, backgroundColor: '#ffffff' });
+                        canvas.toBlob(async (blob) => {
+                            try {
+                                const item = new ClipboardItem({ 'image/png': blob });
+                                await navigator.clipboard.write([item]);
+                                alert('คัดลอกรูปภาพลงคลิปบอร์ดแล้ว สามารถนำไปวางใน LINE ได้เลย');
+                            } catch (err) {
+                                alert('เบราว์เซอร์ของคุณไม่รองรับการคัดลอกรูปภาพอัตโนมัติ กรุณาใช้ปุ่ม Download แทน');
+                            }
+                        });
+                    } catch (error) {
+                        console.error(error);
+                        alert('เกิดข้อผิดพลาดในการสร้างรูปภาพ');
+                    } finally {
+                        setIsLoading(false);
+                    }
+                };
+
+                const handleDownload = async () => {
+                    if (!dashboardRef.current) return;
+                    setIsLoading(true);
+                    try {
+                        const canvas = await html2canvas(dashboardRef.current, { scale: 2, backgroundColor: '#ffffff' });
+                        const link = document.createElement('a');
+                        link.download = `Dashboard_${getMonthYearString(selectedDate)}.png`;
+                        link.href = canvas.toDataURL('image/png');
+                        link.click();
+                    } catch (error) {
+                        console.error(error);
+                        alert('เกิดข้อผิดพลาดในการดาวน์โหลด');
+                    } finally {
+                        setIsLoading(false);
+                    }
+                };
+
+                const renderTable = (title, data) => {
+                    // Filter out 0 amounts and sort descending
+                    const filteredData = data.filter(item => item.amount > 0).sort((a, b) => b.amount - a.amount);
+                    if (filteredData.length === 0) return null;
+
+                    const total = calcTotal(filteredData);
+
+                    return (
+                        <div className="mb-0 border border-black border-b-0 last:border-b">
+                            <div className="table-header py-1 text-lg" style={{backgroundColor: '#a4c2f4', color: 'white', textShadow: '1px 1px 2px rgba(0,0,0,0.2)'}}>
+                                {title}
+                            </div>
+                            <table className="w-full text-black bg-white border-collapse">
+                                <tbody>
+                                    {filteredData.map((item, index) => (
+                                        <tr key={index} className="border-b border-black">
+                                            <td className="w-12 text-center py-1 font-bold border-r border-black">{index + 1}</td>
+                                            <td className="px-3 py-1 font-bold border-r border-black">{item.name}</td>
+                                            <td className="px-3 py-1 text-right font-bold w-40">{formatCurrency(item.amount)}</td>
+                                        </tr>
+                                    ))}
+                                    <tr className="table-total border-b border-black">
+                                        <td colSpan="2" className="px-3 py-1 text-center border-r border-black">Grand Total</td>
+                                        <td className="px-3 py-1 text-right">{formatCurrency(total)}</td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    );
+                };
+
+                return (
+                    <div className="max-w-xl mx-auto">
+                        <div className="flex justify-between items-center mb-4">
+                            <h2 className="text-xl font-bold">Dashboard ยอดขาย</h2>
+                            <div className="flex gap-2">
+                                <button onClick={fetchDashboardData} className="px-3 py-1 bg-gray-200 rounded hover:bg-gray-300 text-sm flex items-center gap-1">
+                                    <i data-lucide="refresh-cw" className="w-4 h-4"></i> อัพเดทข้อมูล
+                                </button>
+                            </div>
+                        </div>
+                        
+                        <div className="flex gap-2 mb-4">
+                            <input 
+                                type="month" 
+                                className="border rounded px-3 py-2 w-full"
+                                value={`${selectedDate.getFullYear()}-${String(selectedDate.getMonth() + 1).padStart(2, '0')}`}
+                                onChange={handleMonthChange}
+                            />
+                        </div>
+
+                        {/* Capture Area */}
+                        <div id="dashboard-tables" ref={dashboardRef} className="bg-white p-4 shadow-sm border" style={{ width: '400px', margin: '0 auto' }}>
+                            <div className="text-center font-bold text-xl mb-0 py-1 border border-black border-b-0 bg-white">
+                                {getDisplayDateRange(selectedDate)}
+                            </div>
+                            
+                            {renderTable("Curtain", dashboardData.curtain)}
+                            {renderTable("Curtain - Fabric / Bedding", dashboardData.curtainFabric)}
+                            {renderTable("Material", dashboardData.material)}
+                            {renderTable("Project", dashboardData.project)}
+                        </div>
+
+                        <div className="flex justify-center gap-4 mt-6">
+                            <button onClick={handleCopy} disabled={isLoading} className="bg-green-500 text-white px-6 py-2 rounded shadow flex items-center gap-2 hover:bg-green-600">
+                                {isLoading ? 'กำลังประมวลผล...' : <><i data-lucide="copy"></i> คัดลอกรูปลง Line</>}
+                            </button>
+                            <button onClick={handleDownload} disabled={isLoading} className="bg-blue-500 text-white px-6 py-2 rounded shadow flex items-center gap-2 hover:bg-blue-600">
+                                <i data-lucide="download"></i> บันทึกรูปภาพ
+                            </button>
+                        </div>
+                    </div>
+                );
+            };
+
+            // 2. Upload View
+            const UploadView = () => {
+                const [file, setFile] = useState(null);
+                const [previewData, setPreviewData] = useState([]);
+                
+                const handleFileChange = async (e) => {
+                    const selectedFile = e.target.files[0];
+                    setFile(selectedFile);
+                    
+                    if(selectedFile) {
+                        const reader = new FileReader();
+                        reader.onload = (evt) => {
+                            const bstr = evt.target.result;
+                            const wb = XLSX.read(bstr, {type:'binary'});
+                            const wsname = wb.SheetNames[0];
+                            const ws = wb.Sheets[wsname];
+                            const data = XLSX.utils.sheet_to_json(ws, {header:1});
+                            setPreviewData(data.slice(0, 5)); // Preview top 5 rows
+                        };
+                        reader.readAsBinaryString(selectedFile);
+                    }
+                };
+
+                const handleUpload = async () => {
+                    if (!file) return alert("กรุณาเลือกไฟล์ก่อน");
+                    if (!gasUrl) return alert("กรุณาตั้งค่า Google Apps Script URL ในเมนูตั้งค่าก่อนอัพโหลด");
+
+                    setIsLoading(true);
+                    
+                    try {
+                        // Read file as base64
+                        const reader = new FileReader();
+                        reader.onload = async (evt) => {
+                            const base64Data = evt.target.result.split(',')[1];
+                            const monthStr = getMonthYearString(selectedDate);
+                            const sheetName = `Raw ยอดขายแต่ละวัน ${monthStr}`;
+
+                            const payload = {
+                                action: 'upload',
+                                sheetName: sheetName,
+                                fileName: file.name,
+                                mimeType: file.type || 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+                                data: base64Data
+                            };
+
+                            // Send to GAS
+                            const response = await fetch(gasUrl, {
+                                method: 'POST',
+                                body: JSON.stringify(payload) // Standard text post to GAS
+                            });
+                            
+                            const result = await response.json();
+                            if(result.status === 'success') {
+                                alert(`อัพโหลดและบันทึกลงชีท ${sheetName} เรียบร้อยแล้ว`);
+                                setFile(null);
+                                setPreviewData([]);
+                            } else {
+                                alert('เกิดข้อผิดพลาด: ' + result.message);
+                            }
+                            setIsLoading(false);
+                        };
+                        reader.readAsDataURL(file);
+
+                    } catch (error) {
+                        console.error(error);
+                        alert('เกิดข้อผิดพลาดในการอัพโหลด');
+                        setIsLoading(false);
+                    }
+                };
+
+                return (
+                    <div className="max-w-2xl mx-auto bg-white p-6 rounded shadow">
+                        <h2 className="text-xl font-bold mb-4">อัพโหลด Daily Sales Report</h2>
+                        
+                        <div className="mb-4">
+                            <label className="block text-sm font-medium mb-1">ระบุเดือนที่จะบันทึกข้อมูล (ข้อมูลจะถูกบันทึกลงชีทตามเดือนนี้)</label>
+                            <input 
+                                type="month" 
+                                className="border rounded px-3 py-2 w-full max-w-xs"
+                                value={`${selectedDate.getFullYear()}-${String(selectedDate.getMonth() + 1).padStart(2, '0')}`}
+                                onChange={handleMonthChange}
+                            />
+                            <p className="text-sm text-gray-500 mt-1">
+                                ชื่อชีทที่จะบันทึก: <span className="font-bold text-blue-600">Raw ยอดขายแต่ละวัน {getMonthYearString(selectedDate)}</span>
+                            </p>
+                        </div>
+
+                        <div className="border-2 border-dashed border-gray-300 rounded p-6 text-center mb-4">
+                            <input type="file" id="fileUpload" className="hidden" accept=".xlsx, .xls, .csv" onChange={handleFileChange} />
+                            <label htmlFor="fileUpload" className="cursor-pointer flex flex-col items-center">
+                                <i data-lucide="file-spreadsheet" className="w-12 h-12 text-green-500 mb-2"></i>
+                                <span className="text-blue-500 font-medium">คลิกเพื่อเลือกไฟล์ Excel/CSV</span>
+                                <span className="text-sm text-gray-400 mt-1">{file ? file.name : "ยังไม่ได้เลือกไฟล์"}</span>
+                            </label>
+                        </div>
+
+                        {previewData.length > 0 && (
+                            <div className="mb-4">
+                                <h3 className="font-medium text-sm mb-2 text-gray-600">ตัวอย่างข้อมูล (5 แถวแรก)</h3>
+                                <div className="overflow-x-auto">
+                                    <table className="min-w-full text-xs border">
+                                        <tbody>
+                                            {previewData.map((row, i) => (
+                                                <tr key={i} className="border-b">
+                                                    {row.map((cell, j) => <td key={j} className="p-1 px-2 border-r truncate max-w-xs">{cell}</td>)}
+                                                </tr>
+                                            ))}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+                        )}
+
+                        <button 
+                            onClick={handleUpload} 
+                            disabled={!file || isLoading}
+                            className={`w-full py-3 rounded font-bold text-white transition ${(!file || isLoading) ? 'bg-gray-400 cursor-not-allowed' : 'bg-blue-600 hover:bg-blue-700 shadow-lg'}`}
+                        >
+                            {isLoading ? 'กำลังอัพโหลด...' : 'ยืนยันการบันทึกลง Google Sheet'}
+                        </button>
+                    </div>
+                );
+            };
+
+            // 3. Settings View (Employee Management & API Config)
+            const SettingsView = () => {
+                const [newEmp, setNewEmp] = useState('');
+
+                const saveGasUrl = (e) => {
+                    const val = e.target.value;
+                    setGasUrl(val);
+                    localStorage.setItem('gasUrl', val);
+                };
+
+                const addEmployee = () => {
+                    if(!newEmp) return;
+                    setEmployees([...employees, { id: Date.now(), name: newEmp }]);
+                    setNewEmp('');
+                };
+
+                const deleteEmployee = (id) => {
+                    if(confirm('ต้องการลบพนักงานคนนี้ใช่หรือไม่?')) {
+                        setEmployees(employees.filter(emp => emp.id !== id));
+                    }
+                };
+
+                return (
+                    <div className="max-w-2xl mx-auto space-y-6">
+                        <div className="bg-white p-6 rounded shadow">
+                            <h2 className="text-xl font-bold mb-4 border-b pb-2 flex items-center gap-2">
+                                <i data-lucide="link" className="w-5 h-5 text-blue-500"></i> การเชื่อมต่อ Google Sheets
+                            </h2>
+                            <p className="text-sm text-gray-600 mb-2">
+                                วาง Web App URL ที่ได้จาก Google Apps Script ที่นี่ เพื่อให้ระบบสามารถดึงและบันทึกข้อมูลได้
+                            </p>
+                            <input 
+                                type="text" 
+                                value={gasUrl} 
+                                onChange={saveGasUrl} 
+                                placeholder="https://script.google.com/macros/s/..."
+                                className="w-full border p-2 rounded focus:ring-2 focus:ring-blue-300 outline-none"
+                            />
+                        </div>
+
+                        <div className="bg-white p-6 rounded shadow">
+                            <h2 className="text-xl font-bold mb-4 border-b pb-2 flex items-center gap-2">
+                                <i data-lucide="users" className="w-5 h-5 text-green-500"></i> จัดการรายชื่อพนักงาน (ส่วนที่ 1-2)
+                            </h2>
+                            <div className="flex gap-2 mb-4">
+                                <input 
+                                    type="text" 
+                                    value={newEmp}
+                                    onChange={(e)=>setNewEmp(e.target.value)}
+                                    placeholder="เพิ่มชื่อพนักงานใหม่ เช่น สมชาย (ชาย)"
+                                    className="flex-1 border p-2 rounded"
+                                />
+                                <button onClick={addEmployee} className="bg-green-500 text-white px-4 py-2 rounded">เพิ่ม</button>
+                            </div>
+                            <ul className="divide-y border rounded">
+                                {employees.map((emp, i) => (
+                                    <li key={emp.id} className="p-3 flex justify-between items-center hover:bg-gray-50">
+                                        <span>{i+1}. {emp.name}</span>
+                                        <button onClick={() => deleteEmployee(emp.id)} className="text-red-500 hover:bg-red-50 p-1 rounded">
+                                            <i data-lucide="trash-2" className="w-4 h-4"></i>
+                                        </button>
+                                    </li>
+                                ))}
+                            </ul>
+                            <p className="text-xs text-gray-500 mt-2">*รายชื่อพนักงานนี้จะถูกใช้เพื่อ Map ข้อมูลจากยอดขาย หากชื่อไม่ตรงกันจะไม่แสดงยอด</p>
+                        </div>
+                    </div>
+                );
+            };
+
+            // React Effect for initializing icons
+            useEffect(() => {
+                if (window.lucide) {
+                    window.lucide.createIcons();
+                }
+            });
+
+            return (
+                <div className="min-h-screen flex flex-col">
+                    {/* Header */}
+                    <header className="bg-blue-800 text-white p-4 shadow-md sticky top-0 z-10">
+                        <div className="container mx-auto flex items-center gap-2">
+                            <i data-lucide="bar-chart-2" className="w-6 h-6"></i>
+                            <h1 className="text-xl font-bold">Daily Sales System</h1>
+                        </div>
+                    </header>
+
+                    {/* Navigation */}
+                    <div className="bg-white shadow-sm border-b">
+                        <div className="container mx-auto flex">
+                            <button onClick={() => setActiveTab('dashboard')} className={`px-6 py-3 font-medium border-b-2 transition-colors ${activeTab === 'dashboard' ? 'border-blue-600 text-blue-600' : 'border-transparent text-gray-500 hover:text-blue-500'}`}>
+                                Dashboard
+                            </button>
+                            <button onClick={() => setActiveTab('upload')} className={`px-6 py-3 font-medium border-b-2 transition-colors ${activeTab === 'upload' ? 'border-blue-600 text-blue-600' : 'border-transparent text-gray-500 hover:text-blue-500'}`}>
+                                อัพโหลดไฟล์
+                            </button>
+                            <button onClick={() => setActiveTab('settings')} className={`px-6 py-3 font-medium border-b-2 transition-colors ${activeTab === 'settings' ? 'border-blue-600 text-blue-600' : 'border-transparent text-gray-500 hover:text-blue-500'}`}>
+                                ตั้งค่า / พนักงาน
+                            </button>
+                        </div>
+                    </div>
+
+                    {/* Main Content */}
+                    <main className="flex-1 container mx-auto p-4 py-8">
+                        {activeTab === 'dashboard' && <DashboardView />}
+                        {activeTab === 'upload' && <UploadView />}
+                        {activeTab === 'settings' && <SettingsView />}
+                    </main>
+
+                    {/* Loading Overlay */}
+                    {isLoading && (
+                        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+                            <div className="bg-white p-4 rounded shadow-lg flex items-center gap-3">
+                                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+                                <span className="font-medium">กำลังประมวลผล...</span>
+                            </div>
+                        </div>
+                    )}
+                </div>
+            );
+        }
+
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<App />);
+    </script>
+</body>
+</html>
