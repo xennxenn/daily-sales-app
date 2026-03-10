@@ -83,6 +83,22 @@
             ]
         };
 
+        // Component ย่อยสำหรับจัดให้อยู่กึ่งกลางเป๊ะๆ (Flexbox)
+        const CellContent = ({ children, align = 'left', bold = false }) => (
+            <div style={{ 
+                display: 'flex', 
+                alignItems: 'center', 
+                justifyContent: align === 'center' ? 'center' : align === 'right' ? 'flex-end' : 'flex-start',
+                minHeight: '28px', 
+                padding: '4px 8px',
+                fontWeight: bold ? 'bold' : 'normal',
+                width: '100%',
+                boxSizing: 'border-box'
+            }}>
+                {children}
+            </div>
+        );
+
         // --- Main App Component ---
         function App() {
             const [activeTab, setActiveTab] = useState('dashboard');
@@ -228,9 +244,10 @@
                     }
                 };
 
-                // ฟังก์ชันกรองเฉพาะพนักงานที่มีในระบบ (ปรับให้กำจัดช่องว่างทั้งหมดก่อนเปรียบเทียบ เพื่อความแม่นยำ)
+                // ฟังก์ชันกรองเฉพาะพนักงานที่มีในระบบ (ปรับปรุงให้ลบวงเล็บทิ้งด้วย เพื่อลดความผิดพลาดในการพิมพ์ชื่อ)
                 const filterKnownEmployees = (data) => {
-                    const normalizeStr = (str) => (str || '').replace(/\s+/g, '').toLowerCase();
+                    // ลบช่องว่าง และ วงเล็บ ทุกชนิดออกก่อนเทียบชื่อ
+                    const normalizeStr = (str) => (str || '').replace(/[\s\(\)（）]/g, '').toLowerCase();
                     const activeEmployeeNames = employees.map(emp => normalizeStr(emp.name));
                     
                     return data.filter(item => {
@@ -248,21 +265,31 @@
 
                     return (
                         <div className="mb-0">
-                            <div className="table-header text-lg" style={{backgroundColor: '#a4c2f4', color: 'white', textShadow: '1px 1px 2px rgba(0,0,0,0.2)', borderBottom: '1px solid black', padding: '6px 0', lineHeight: '1.2'}}>
-                                {title}
+                            <div className="table-header text-lg" style={{backgroundColor: '#a4c2f4', color: 'white', textShadow: '1px 1px 2px rgba(0,0,0,0.2)', borderBottom: '1px solid black'}}>
+                                <CellContent align="center" bold>{title}</CellContent>
                             </div>
                             <table className="w-full text-black bg-white" style={{ borderCollapse: 'collapse' }}>
                                 <tbody>
                                     {filteredData.map((item, index) => (
                                         <tr key={index}>
-                                            <td className="w-12 text-center font-bold" style={{ borderBottom: '1px solid black', borderRight: '1px solid black', padding: '6px 4px', lineHeight: '1.2' }}>{index + 1}</td>
-                                            <td className="font-bold" style={{ borderBottom: '1px solid black', borderRight: '1px solid black', padding: '6px 12px', lineHeight: '1.2' }}>{item.name}</td>
-                                            <td className="text-right font-bold w-40" style={{ borderBottom: '1px solid black', padding: '6px 12px', lineHeight: '1.2' }}>{formatCurrency(item.amount)}</td>
+                                            <td className="w-12" style={{ borderBottom: '1px solid black', borderRight: '1px solid black', padding: 0 }}>
+                                                <CellContent align="center" bold>{index + 1}</CellContent>
+                                            </td>
+                                            <td style={{ borderBottom: '1px solid black', borderRight: '1px solid black', padding: 0 }}>
+                                                <CellContent bold>{item.name}</CellContent>
+                                            </td>
+                                            <td className="w-40" style={{ borderBottom: '1px solid black', padding: 0 }}>
+                                                <CellContent align="right" bold>{formatCurrency(item.amount)}</CellContent>
+                                            </td>
                                         </tr>
                                     ))}
                                     <tr className="table-total" style={{ backgroundColor: '#ffff00' }}>
-                                        <td colSpan="2" className="text-center font-bold" style={{ borderBottom: '1px solid black', borderRight: '1px solid black', padding: '6px 12px', lineHeight: '1.2' }}>Grand Total</td>
-                                        <td className="text-right font-bold" style={{ borderBottom: '1px solid black', padding: '6px 12px', lineHeight: '1.2' }}>{formatCurrency(total)}</td>
+                                        <td colSpan="2" style={{ borderBottom: '1px solid black', borderRight: '1px solid black', padding: 0 }}>
+                                            <CellContent align="center" bold>Grand Total</CellContent>
+                                        </td>
+                                        <td style={{ borderBottom: '1px solid black', padding: 0 }}>
+                                            <CellContent align="right" bold>{formatCurrency(total)}</CellContent>
+                                        </td>
                                     </tr>
                                 </tbody>
                             </table>
@@ -293,8 +320,8 @@
                         {/* Capture Area: ปรับ padding ให้เหลือน้อยที่สุดเพื่อให้ขอบรูปชิดเส้นตาราง */}
                         <div id="dashboard-tables" ref={dashboardRef} className="bg-white shadow-sm" style={{ width: '400px', margin: '0 auto', padding: '2px' }}>
                             <div className="bg-white" style={{ borderLeft: '1px solid black', borderRight: '1px solid black', borderTop: '1px solid black' }}>
-                                <div className="text-center font-bold text-xl mb-0" style={{ borderBottom: '1px solid black', padding: '8px 0', lineHeight: '1.2' }}>
-                                    {getDisplayDateRange(selectedDate)}
+                                <div className="text-center font-bold text-xl mb-0" style={{ borderBottom: '1px solid black' }}>
+                                    <CellContent align="center" bold>{getDisplayDateRange(selectedDate)}</CellContent>
                                 </div>
                                 
                                 {/* Section 1 & 2 นำไปผ่าน filterKnownEmployees ก่อน */}
