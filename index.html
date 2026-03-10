@@ -5,10 +5,10 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Daily Sales Report Application</title>
     
-    <!-- นำเข้าฟอนต์แบบ Link เพื่อแก้ปัญหาตัวแปลงรูปภาพหาฟอนต์ไม่เจอ -->
+    <!-- นำเข้าฟอนต์แบบ Link พร้อม crossorigin เพื่อแก้ปัญหา html-to-image อ่าน cssRules ไม่ได้ (CORS SecurityError) -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="anonymous">
+    <link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@300;400;500;600;700&display=swap" rel="stylesheet" crossorigin="anonymous">
     
     <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
@@ -219,12 +219,19 @@
                 }
             }, [activeTab, selectedDate]);
 
+            // อัปเดตฟังก์ชัน capture รูปเพื่อแก้ไขปัญหาตกขอบซ้าย/ขวา
             const captureImage = async () => {
                 const node = dashboardRef.current;
                 const options = { 
                     backgroundColor: '#ffffff', 
                     pixelRatio: 2, 
-                    style: { fontFamily: "'Sarabun', sans-serif" } 
+                    style: { 
+                        fontFamily: "'Sarabun', sans-serif",
+                        margin: 0 // บังคับล้าง margin ระหว่างทำการแคปเพื่อป้องกัน offset ผิดพลาด
+                    },
+                    // บังคับความกว้าง/ความสูงให้ตรงกับขนาดจริงของกล่องเท่านั้น
+                    width: node.offsetWidth,
+                    height: node.offsetHeight
                 };
                 
                 await window.htmlToImage.toPng(node, options);
@@ -460,22 +467,25 @@
                                     />
                                 </div>
 
-                                <div id="dashboard-tables" ref={dashboardRef} className="bg-white" style={{ width: '400px', margin: '0 auto', border: '1px solid #000000', padding: 0, fontFamily: "'Sarabun', sans-serif" }}>
-                                    <div style={{ 
-                                        borderBottom: '1px solid #000000',
-                                        padding: '8px 0',
-                                        textAlign: 'center',
-                                        fontWeight: 'bold',
-                                        fontSize: '1.25rem',
-                                        color: '#000000'
-                                    }}>
-                                        {getDisplayDateRange(selectedDate)}
+                                {/* ย้ายการกำหนดระยะกึ่งกลางหน้าจอ (flex) ออกมาไว้ที่กล่องข้างนอก เพื่อไม่ให้สับสนตอนแคปรูป */}
+                                <div className="flex justify-center w-full">
+                                    <div id="dashboard-tables" ref={dashboardRef} className="bg-white" style={{ width: '400px', border: '1px solid #000000', padding: 0, fontFamily: "'Sarabun', sans-serif" }}>
+                                        <div style={{ 
+                                            borderBottom: '1px solid #000000',
+                                            padding: '8px 0',
+                                            textAlign: 'center',
+                                            fontWeight: 'bold',
+                                            fontSize: '1.25rem',
+                                            color: '#000000'
+                                        }}>
+                                            {getDisplayDateRange(selectedDate)}
+                                        </div>
+                                        
+                                        {renderTable("Curtain", filterKnownEmployees(dashboardData.curtain))}
+                                        {renderTable("Curtain - Fabric / Bedding", filterKnownEmployees(dashboardData.curtainFabric))}
+                                        {renderTable("Material", dashboardData.material)}
+                                        {renderTable("Project", dashboardData.project)}
                                     </div>
-                                    
-                                    {renderTable("Curtain", filterKnownEmployees(dashboardData.curtain))}
-                                    {renderTable("Curtain - Fabric / Bedding", filterKnownEmployees(dashboardData.curtainFabric))}
-                                    {renderTable("Material", dashboardData.material)}
-                                    {renderTable("Project", dashboardData.project)}
                                 </div>
 
                                 <div className="flex justify-center gap-4 mt-6">
