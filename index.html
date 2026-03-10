@@ -228,10 +228,15 @@
                     }
                 };
 
-                // ฟังก์ชันกรองเฉพาะพนักงานที่มีในระบบ
+                // ฟังก์ชันกรองเฉพาะพนักงานที่มีในระบบ (ปรับให้กำจัดช่องว่างทั้งหมดก่อนเปรียบเทียบ เพื่อความแม่นยำ)
                 const filterKnownEmployees = (data) => {
-                    const activeEmployeeNames = employees.map(emp => emp.name.trim());
-                    return data.filter(item => item.name && activeEmployeeNames.includes(item.name.trim()));
+                    const normalizeStr = (str) => (str || '').replace(/\s+/g, '').toLowerCase();
+                    const activeEmployeeNames = employees.map(emp => normalizeStr(emp.name));
+                    
+                    return data.filter(item => {
+                        if (!item.name) return false;
+                        return activeEmployeeNames.includes(normalizeStr(item.name));
+                    });
                 };
 
                 const renderTable = (title, data) => {
@@ -243,21 +248,21 @@
 
                     return (
                         <div className="mb-0">
-                            <div className="table-header text-lg" style={{backgroundColor: '#a4c2f4', color: 'white', textShadow: '1px 1px 2px rgba(0,0,0,0.2)', borderBottom: '1px solid black', padding: '6px 0'}}>
+                            <div className="table-header text-lg" style={{backgroundColor: '#a4c2f4', color: 'white', textShadow: '1px 1px 2px rgba(0,0,0,0.2)', borderBottom: '1px solid black', padding: '6px 0', lineHeight: '1.2'}}>
                                 {title}
                             </div>
                             <table className="w-full text-black bg-white" style={{ borderCollapse: 'collapse' }}>
                                 <tbody>
                                     {filteredData.map((item, index) => (
                                         <tr key={index}>
-                                            <td className="w-12 text-center font-bold" style={{ borderBottom: '1px solid black', borderRight: '1px solid black', padding: '6px 4px', verticalAlign: 'middle' }}>{index + 1}</td>
-                                            <td className="font-bold" style={{ borderBottom: '1px solid black', borderRight: '1px solid black', padding: '6px 12px', verticalAlign: 'middle' }}>{item.name}</td>
-                                            <td className="text-right font-bold w-40" style={{ borderBottom: '1px solid black', padding: '6px 12px', verticalAlign: 'middle' }}>{formatCurrency(item.amount)}</td>
+                                            <td className="w-12 text-center font-bold" style={{ borderBottom: '1px solid black', borderRight: '1px solid black', padding: '6px 4px', lineHeight: '1.2' }}>{index + 1}</td>
+                                            <td className="font-bold" style={{ borderBottom: '1px solid black', borderRight: '1px solid black', padding: '6px 12px', lineHeight: '1.2' }}>{item.name}</td>
+                                            <td className="text-right font-bold w-40" style={{ borderBottom: '1px solid black', padding: '6px 12px', lineHeight: '1.2' }}>{formatCurrency(item.amount)}</td>
                                         </tr>
                                     ))}
                                     <tr className="table-total" style={{ backgroundColor: '#ffff00' }}>
-                                        <td colSpan="2" className="text-center font-bold" style={{ borderBottom: '1px solid black', borderRight: '1px solid black', padding: '6px 12px', verticalAlign: 'middle' }}>Grand Total</td>
-                                        <td className="text-right font-bold" style={{ borderBottom: '1px solid black', padding: '6px 12px', verticalAlign: 'middle' }}>{formatCurrency(total)}</td>
+                                        <td colSpan="2" className="text-center font-bold" style={{ borderBottom: '1px solid black', borderRight: '1px solid black', padding: '6px 12px', lineHeight: '1.2' }}>Grand Total</td>
+                                        <td className="text-right font-bold" style={{ borderBottom: '1px solid black', padding: '6px 12px', lineHeight: '1.2' }}>{formatCurrency(total)}</td>
                                     </tr>
                                 </tbody>
                             </table>
@@ -285,10 +290,10 @@
                             />
                         </div>
 
-                        {/* Capture Area */}
-                        <div id="dashboard-tables" ref={dashboardRef} className="bg-white p-4 shadow-sm border" style={{ width: '400px', margin: '0 auto' }}>
+                        {/* Capture Area: ปรับ padding ให้เหลือน้อยที่สุดเพื่อให้ขอบรูปชิดเส้นตาราง */}
+                        <div id="dashboard-tables" ref={dashboardRef} className="bg-white shadow-sm" style={{ width: '400px', margin: '0 auto', padding: '2px' }}>
                             <div className="bg-white" style={{ borderLeft: '1px solid black', borderRight: '1px solid black', borderTop: '1px solid black' }}>
-                                <div className="text-center font-bold text-xl mb-0" style={{ borderBottom: '1px solid black', padding: '8px 0' }}>
+                                <div className="text-center font-bold text-xl mb-0" style={{ borderBottom: '1px solid black', padding: '8px 0', lineHeight: '1.2' }}>
                                     {getDisplayDateRange(selectedDate)}
                                 </div>
                                 
