@@ -110,7 +110,10 @@
             const [activeTab, setActiveTab] = useState('dashboard');
             const [selectedDate, setSelectedDate] = useState(new Date());
             const [employees, setEmployees] = useState(initialEmployees);
-            const [gasUrl, setGasUrl] = useState(localStorage.getItem('gasUrl') || '');
+            
+            // ฝังลิงก์ Google Apps Script ลงในโค้ดโดยตรง (ใช้ได้ทุกคนทุกเครื่องทันที)
+            const [gasUrl, setGasUrl] = useState('https://script.google.com/macros/s/AKfycbyiCzEOcwB7ZeXKWze0pxzKgS7U0A7ICFq8s5ufJqenRpRMfQ37qnpIWjgRgKHUZ5aGaA/exec');
+            
             const [isLoading, setIsLoading] = useState(false);
             const [dashboardData, setDashboardData] = useState(mockDashboardData);
             
@@ -346,9 +349,7 @@
             };
 
             const saveGasUrl = (e) => {
-                const val = e.target.value;
-                setGasUrl(val);
-                localStorage.setItem('gasUrl', val);
+                setGasUrl(e.target.value);
             };
 
             const addEmployee = () => {
@@ -596,7 +597,7 @@
                                         <Icon name="link" className="w-5 h-5 text-blue-500" /> การเชื่อมต่อ Google Sheets
                                     </h2>
                                     <p className="text-sm text-gray-600 mb-2">
-                                        วาง Web App URL ที่นี่ (ระบบจะจำไว้ในเครื่องอัตโนมัติ)
+                                        ลิงก์ Web App URL ถูกฝังไว้ในระบบเรียบร้อยแล้ว (สามารถแก้ไขชั่วคราวได้ที่นี่)
                                     </p>
                                     <input 
                                         type="text" 
