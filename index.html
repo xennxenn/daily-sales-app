@@ -112,7 +112,7 @@
             const [employees, setEmployees] = useState(initialEmployees);
             
             // ฝังลิงก์ Google Apps Script ลงในโค้ดโดยตรง (ใช้ได้ทุกคนทุกเครื่องทันที)
-            const [gasUrl, setGasUrl] = useState('https://script.google.com/macros/s/AKfycbyiCzEOcwB7ZeXKWze0pxzKgS7U0A7ICFq8s5ufJqenRpRMfQ37qnpIWjgRgKHUZ5aGaA/exec');
+            const [gasUrl, setGasUrl] = useState('https://script.google.com/macros/s/AKfycbz2H8RE13UmgVCU02Q8BhEJbhYJcwr3KwcflaZUS1k9KvRqRPfJME5u5p_I6Tozu7oA7A/exec');
             
             const [isLoading, setIsLoading] = useState(false);
             const [dashboardData, setDashboardData] = useState(mockDashboardData);
@@ -120,6 +120,7 @@
             // Upload State
             const [file, setFile] = useState(null);
             const [previewData, setPreviewData] = useState([]);
+            const [fullData, setFullData] = useState([]); // State ใหม่สำหรับเก็บข้อมูลทั้งหมดเพื่อส่งไปเซฟ
             
             // Settings State
             const [isAuthenticated, setIsAuthenticated] = useState(false);
@@ -310,8 +311,10 @@
                             
                             const wsname = wb.SheetNames[0];
                             const ws = wb.Sheets[wsname];
-                            const dataArray = XLSX.utils.sheet_to_json(ws, {header:1});
+                            // ใช้ defval: "" เพื่อป้องกันปัญหาข้อมูลแหว่ง (Jagged Array) ที่ทำให้ Google Sheet Error
+                            const dataArray = XLSX.utils.sheet_to_json(ws, {header:1, defval: ""});
                             setPreviewData(dataArray.slice(0, 50));
+                            setFullData(dataArray); // เก็บข้อมูลทั้งหมดไว้ส่งไปเซฟ
                         } catch (err) {
                             console.error("Error reading file:", err);
                             alert("เกิดข้อผิดพลาดในการอ่านรูปแบบไฟล์");
@@ -324,7 +327,7 @@
             };
 
             const handleUpload = async () => {
-                if (!file) return alert("กรุณาเลือกไฟล์ก่อน");
+                if (!file || fullData.length === 0) return alert("กรุณาเลือกไฟล์ก่อน");
                 if (!gasUrl) return alert("กรุณาตั้งค่า Google Apps Script URL ในหน้าตั้งค่าก่อนใช้งาน");
 
                 // --- เพิ่มระบบยืนยันรหัสผ่านเพื่อคอนเฟิร์ม ---
@@ -337,79 +340,42 @@
                 setIsLoading(true);
                 
                 try {
-                    const extension = file.name.split('.').pop().toLowerCase();
-                    const reader = new FileReader();
-                    
-                    reader.onload = async (evt) => {
-                        let base64Data = '';
-                        
-                        // ถอดรหัสไฟล์และจัดเตรียมข้อมูลเพื่อให้มั่นใจว่าภาษาไทยจะไม่เพี้ยนเมื่อส่งขึ้น Google Sheet
-                        if (extension === 'csv' || extension === 'txt') {
-                            const buffer = evt.target.result;
-                            const uint8Array = new Uint8Array(buffer);
-                            let text = '';
-                            try {
-                                const utf8Decoder = new TextDecoder('utf-8', {fatal: true});
-                                text = utf8Decoder.decode(uint8Array);
-                            } catch (e) {
-                                const tisDecoder = new TextDecoder('windows-874');
-                                text = tisDecoder.decode(uint8Array);
-                            }
-                            
-                            // แปลงข้อความที่ถูกต้องกลับเป็น UTF-8 Bytes สำหรับอัปโหลด
-                            const utf8Bytes = new TextEncoder().encode(text);
-                            let binary = '';
-                            const chunkSize = 8192;
-                            for (let i = 0; i < utf8Bytes.length; i += chunkSize) {
-                                const chunk = utf8Bytes.subarray(i, i + chunkSize);
-                                binary += String.fromCharCode.apply(null, chunk);
-                            }
-                            base64Data = window.btoa(binary);
-                        } else {
-                            // สำหรับ Excel ใช้ไบต์ดั้งเดิมได้เลย
-                            const buffer = evt.target.result;
-                            const uint8Array = new Uint8Array(buffer);
-                            let binary = '';
-                            const chunkSize = 8192;
-                            for (let i = 0; i < uint8Array.length; i += chunkSize) {
-                                const chunk = uint8Array.subarray(i, i + chunkSize);
-                                binary += String.fromCharCode.apply(null, chunk);
-                            }
-                            base64Data = window.btoa(binary);
-                        }
+                    const monthStr = getMonthYearString(selectedDate);
+                    const sheetName = `Raw ยอดขายแต่ละวัน ${monthStr}`;
 
-                        const monthStr = getMonthYearString(selectedDate);
-                        const sheetName = `Raw ยอดขายแต่ละวัน ${monthStr}`;
+                    // ปรับแต่งข้อมูลให้เป็นสี่เหลี่ยมผืนผ้า (Array 2D สมบูรณ์) เพื่อให้ Google Sheet บันทึกได้
+                    const maxCols = Math.max(...fullData.map(row => row.length));
+                    const normalizedData = fullData.map(row => {
+                        const newRow = [...row];
+                        while (newRow.length < maxCols) newRow.push("");
+                        // แปลงทุกค่าเป็น String เพื่อป้องกัน Error วันที่/null จาก Google Sheet
+                        return newRow.map(cell => cell === null || cell === undefined ? "" : String(cell));
+                    });
 
-                        const payload = {
-                            action: 'upload',
-                            sheetName: sheetName,
-                            fileName: file.name,
-                            mimeType: file.type || 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-                            data: base64Data
-                        };
-
-                        const response = await fetch(gasUrl, {
-                            method: 'POST',
-                            body: JSON.stringify(payload)
-                        });
-                        
-                        const result = await response.json();
-                        if(result.status === 'success') {
-                            alert(`อัพโหลดและบันทึกลงชีท ${sheetName} เรียบร้อยแล้ว`);
-                            setFile(null);
-                            setPreviewData([]);
-                        } else {
-                            alert('เกิดข้อผิดพลาด: ' + result.message);
-                        }
-                        setIsLoading(false);
+                    const payload = {
+                        action: 'upload',
+                        sheetName: sheetName,
+                        data: normalizedData // ส่งเป็น Array 2D ไปให้ GAS บันทึกลงเซลล์โดยตรง
                     };
-                    
-                    reader.readAsArrayBuffer(file);
 
+                    const response = await fetch(gasUrl, {
+                        method: 'POST',
+                        body: JSON.stringify(payload)
+                    });
+                    
+                    const result = await response.json();
+                    if(result.status === 'success') {
+                        alert(`อัปโหลดและบันทึกลงชีท ${sheetName} เรียบร้อยแล้ว`);
+                        setFile(null);
+                        setPreviewData([]);
+                        setFullData([]);
+                    } else {
+                        alert('เกิดข้อผิดพลาด: ' + result.message);
+                    }
                 } catch (error) {
                     console.error(error);
-                    alert('เกิดข้อผิดพลาดในการอัพโหลด');
+                    alert('เกิดข้อผิดพลาดในการอัปโหลด');
+                } finally {
                     setIsLoading(false);
                 }
             };
