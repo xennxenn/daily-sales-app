@@ -222,7 +222,6 @@
                 }
             }, [activeTab, selectedDate]);
 
-            // อัปเดตฟังก์ชัน capture รูปเพื่อแก้ไขปัญหาตกขอบซ้าย/ขวา
             const captureImage = async () => {
                 const node = dashboardRef.current;
                 const options = { 
@@ -232,7 +231,6 @@
                         fontFamily: "'Sarabun', sans-serif",
                         margin: 0 // บังคับล้าง margin ระหว่างทำการแคปเพื่อป้องกัน offset ผิดพลาด
                     },
-                    // บังคับความกว้าง/ความสูงให้ตรงกับขนาดจริงของกล่องเท่านั้น
                     width: node.offsetWidth,
                     height: node.offsetHeight
                 };
@@ -276,21 +274,52 @@
                 }
             };
 
+            // ปรับปรุงฟังก์ชันอัปโหลดเพื่อแก้ปัญหา CSV/TXT ภาษาต่างดาว
             const handleFileChange = async (e) => {
                 const selectedFile = e.target.files[0];
                 setFile(selectedFile);
                 
                 if(selectedFile) {
+                    const extension = selectedFile.name.split('.').pop().toLowerCase();
                     const reader = new FileReader();
+                    
                     reader.onload = (evt) => {
-                        const bstr = evt.target.result;
-                        const wb = XLSX.read(bstr, {type:'binary'});
-                        const wsname = wb.SheetNames[0];
-                        const ws = wb.Sheets[wsname];
-                        const data = XLSX.utils.sheet_to_json(ws, {header:1});
-                        setPreviewData(data.slice(0, 50));
+                        try {
+                            let wb;
+                            // ตรวจจับไฟล์ csv/txt เพื่อถอดรหัสภาษาไทย (แก้ปัญหาภาษาต่างดาว)
+                            if (extension === 'csv' || extension === 'txt') {
+                                const buffer = evt.target.result;
+                                const uint8Array = new Uint8Array(buffer);
+                                let text = '';
+                                
+                                try {
+                                    // พยายามอ่านแบบ UTF-8 ก่อน
+                                    const utf8Decoder = new TextDecoder('utf-8', {fatal: true});
+                                    text = utf8Decoder.decode(uint8Array);
+                                } catch (e) {
+                                    // หากไฟล์ไม่ใช่ UTF-8 (เช่น ไฟล์เก่าๆ) ให้ใช้การถอดรหัสแบบภาษาไทย TIS-620
+                                    const tisDecoder = new TextDecoder('windows-874');
+                                    text = tisDecoder.decode(uint8Array);
+                                }
+                                wb = XLSX.read(text, {type: 'string'});
+                            } else {
+                                // สำหรับไฟล์ Excel ปกติ
+                                const data = new Uint8Array(evt.target.result);
+                                wb = XLSX.read(data, {type: 'array'});
+                            }
+                            
+                            const wsname = wb.SheetNames[0];
+                            const ws = wb.Sheets[wsname];
+                            const dataArray = XLSX.utils.sheet_to_json(ws, {header:1});
+                            setPreviewData(dataArray.slice(0, 50));
+                        } catch (err) {
+                            console.error("Error reading file:", err);
+                            alert("เกิดข้อผิดพลาดในการอ่านรูปแบบไฟล์");
+                        }
                     };
-                    reader.readAsBinaryString(selectedFile);
+                    
+                    // อ่านไฟล์เป็น ArrayBuffer เพื่อให้เราควบคุมการถอดรหัสภาษาได้เอง
+                    reader.readAsArrayBuffer(selectedFile);
                 }
             };
 
@@ -298,12 +327,57 @@
                 if (!file) return alert("กรุณาเลือกไฟล์ก่อน");
                 if (!gasUrl) return alert("กรุณาตั้งค่า Google Apps Script URL ในหน้าตั้งค่าก่อนใช้งาน");
 
+                // --- เพิ่มระบบยืนยันรหัสผ่านเพื่อคอนเฟิร์ม ---
+                const confirmPrompt = window.prompt('กรุณาพิมพ์คำว่า "confirm" เพื่อยืนยันการบันทึกข้อมูลลง Google Sheet:');
+                if (!confirmPrompt || confirmPrompt.trim().toLowerCase() !== 'confirm') {
+                    alert('ยกเลิกการบันทึกข้อมูล (พิมพ์คำยืนยันไม่ถูกต้อง)');
+                    return;
+                }
+
                 setIsLoading(true);
                 
                 try {
+                    const extension = file.name.split('.').pop().toLowerCase();
                     const reader = new FileReader();
+                    
                     reader.onload = async (evt) => {
-                        const base64Data = evt.target.result.split(',')[1];
+                        let base64Data = '';
+                        
+                        // ถอดรหัสไฟล์และจัดเตรียมข้อมูลเพื่อให้มั่นใจว่าภาษาไทยจะไม่เพี้ยนเมื่อส่งขึ้น Google Sheet
+                        if (extension === 'csv' || extension === 'txt') {
+                            const buffer = evt.target.result;
+                            const uint8Array = new Uint8Array(buffer);
+                            let text = '';
+                            try {
+                                const utf8Decoder = new TextDecoder('utf-8', {fatal: true});
+                                text = utf8Decoder.decode(uint8Array);
+                            } catch (e) {
+                                const tisDecoder = new TextDecoder('windows-874');
+                                text = tisDecoder.decode(uint8Array);
+                            }
+                            
+                            // แปลงข้อความที่ถูกต้องกลับเป็น UTF-8 Bytes สำหรับอัปโหลด
+                            const utf8Bytes = new TextEncoder().encode(text);
+                            let binary = '';
+                            const chunkSize = 8192;
+                            for (let i = 0; i < utf8Bytes.length; i += chunkSize) {
+                                const chunk = utf8Bytes.subarray(i, i + chunkSize);
+                                binary += String.fromCharCode.apply(null, chunk);
+                            }
+                            base64Data = window.btoa(binary);
+                        } else {
+                            // สำหรับ Excel ใช้ไบต์ดั้งเดิมได้เลย
+                            const buffer = evt.target.result;
+                            const uint8Array = new Uint8Array(buffer);
+                            let binary = '';
+                            const chunkSize = 8192;
+                            for (let i = 0; i < uint8Array.length; i += chunkSize) {
+                                const chunk = uint8Array.subarray(i, i + chunkSize);
+                                binary += String.fromCharCode.apply(null, chunk);
+                            }
+                            base64Data = window.btoa(binary);
+                        }
+
                         const monthStr = getMonthYearString(selectedDate);
                         const sheetName = `Raw ยอดขายแต่ละวัน ${monthStr}`;
 
@@ -330,7 +404,8 @@
                         }
                         setIsLoading(false);
                     };
-                    reader.readAsDataURL(file);
+                    
+                    reader.readAsArrayBuffer(file);
 
                 } catch (error) {
                     console.error(error);
@@ -519,10 +594,11 @@
                                 </div>
 
                                 <div className="border-2 border-dashed border-gray-300 rounded p-6 text-center mb-4">
-                                    <input type="file" id="fileUpload" className="hidden" accept=".xlsx, .xls, .csv" onChange={handleFileChange} />
+                                    {/* รองรับการเลือกไฟล์ .txt เพิ่มเติมด้วย */}
+                                    <input type="file" id="fileUpload" className="hidden" accept=".xlsx, .xls, .csv, .txt" onChange={handleFileChange} />
                                     <label htmlFor="fileUpload" className="cursor-pointer flex flex-col items-center">
                                         <Icon name="file-spreadsheet" className="w-12 h-12 text-green-500 mb-2" />
-                                        <span className="text-blue-500 font-medium">คลิกเพื่อเลือกไฟล์ Excel/CSV</span>
+                                        <span className="text-blue-500 font-medium">คลิกเพื่อเลือกไฟล์ CSV, TXT, Excel</span>
                                         <span className="text-sm text-gray-400 mt-1">{file ? file.name : "ยังไม่ได้เลือกไฟล์"}</span>
                                     </label>
                                 </div>
