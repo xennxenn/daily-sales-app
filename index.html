@@ -370,7 +370,15 @@
 
             // --- View Renderers ---
             const renderTable = (title, data) => {
-                const filteredData = data.filter(item => item.amount > 0).sort((a, b) => b.amount - a.amount);
+                const filteredData = data.filter(item => {
+                    const nameCheck = (item.name || '').toLowerCase().trim();
+                    // กรองบรรทัดที่เป็นยอดรวมจากในชีทออก ไม่ให้นำมาปะปนกับพนักงาน
+                    const isTotalRow = nameCheck.includes('grand total') || nameCheck === 'total' || nameCheck.includes('รวม');
+                    
+                    // นำยอดที่ไม่ใช่ 0 (รวมยอดติดลบ) และไม่ใช่แถวสรุปยอด มาแสดงผล
+                    return item.amount !== 0 && !isTotalRow;
+                }).sort((a, b) => b.amount - a.amount);
+
                 if (filteredData.length === 0) return null;
 
                 const total = calcTotal(filteredData);
@@ -721,14 +729,3 @@
     </script>
 </body>
 </html>
-
-
-
-
-
-
-
-
-
-
-
